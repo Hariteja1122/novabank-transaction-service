@@ -1,0 +1,65 @@
+# Shared settings for every environment. Environment files only change endpoints,
+# pool sizes and log levels. Secrets always come from environment variables.
+server:
+  port: ${PORT:8083}
+  shutdown: graceful
+
+spring:
+  application:
+    name: transaction-service
+  profiles:
+    default: local
+  threads:
+    virtual:
+      enabled: true
+  datasource:
+    url: jdbc:db2://${DB_HOST}:${DB_PORT:50000}/${DB_NAME:NOVABANK}:retrieveMessagesFromServerOnGetMessage=true;
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    driver-class-name: com.ibm.db2.jcc.DB2Driver
+    hikari:
+      pool-name: transaction-pool
+      maximum-pool-size: ${DB_POOL_SIZE:5}
+      connection-timeout: 10000
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: none        # schema is owned by novabank-platform/db2 scripts
+    properties:
+      hibernate:
+        default_schema: NB_TXN
+        jdbc.time_zone: UTC
+
+novabank:
+  security:
+    jwt:
+      secret: ${JWT_SECRET}
+      issuer: novabank-auth
+    internal-api-key: ${INTERNAL_API_KEY}
+  services:
+    account-url: ${ACCOUNT_SERVICE_URL}
+  limits:
+    # Business rule: a single customer transfer cannot exceed this amount.
+    max-transfer-amount: ${MAX_TRANSFER_AMOUNT:10000.00}
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    environment: ${spring.profiles.active:local}
+
+logging:
+  pattern:
+    level: "%5p [${spring.application.name},%X{correlationId:-}]"
