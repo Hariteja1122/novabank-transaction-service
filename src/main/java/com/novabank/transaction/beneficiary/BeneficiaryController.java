@@ -1,5 +1,6 @@
 package com.novabank.transaction.beneficiary;
 
+import com.novabank.transaction.audit.Audited;
 import com.novabank.transaction.beneficiary.BeneficiaryDtos.BeneficiaryDto;
 import com.novabank.transaction.beneficiary.BeneficiaryDtos.CreateBeneficiaryRequest;
 import com.novabank.transaction.beneficiary.BeneficiaryDtos.RenameBeneficiaryRequest;
@@ -42,6 +43,7 @@ public class BeneficiaryController {
     }
 
     @PostMapping
+    @Audited(action = "BENEFICIARY_ADD", targetType = "BENEFICIARY")
     @ResponseStatus(HttpStatus.CREATED)
     public BeneficiaryDto create(@Valid @RequestBody CreateBeneficiaryRequest req, @AuthenticationPrincipal Jwt jwt) {
         return service.create(req, CurrentUser.id(jwt));
@@ -49,12 +51,14 @@ public class BeneficiaryController {
 
     /** Only the nickname can change. A different account number is a different payee. */
     @PutMapping("/{id}")
+    @Audited(action = "BENEFICIARY_RENAME", targetType = "BENEFICIARY", targetParam = "id")
     public BeneficiaryDto rename(@PathVariable Long id, @Valid @RequestBody RenameBeneficiaryRequest req,
                                  @AuthenticationPrincipal Jwt jwt) {
         return service.rename(id, req.nickname(), CurrentUser.id(jwt));
     }
 
     @DeleteMapping("/{id}")
+    @Audited(action = "BENEFICIARY_DELETE", targetType = "BENEFICIARY", targetParam = "id")
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void delete(@PathVariable Long id, @AuthenticationPrincipal Jwt jwt) {
         service.delete(id, CurrentUser.id(jwt));
