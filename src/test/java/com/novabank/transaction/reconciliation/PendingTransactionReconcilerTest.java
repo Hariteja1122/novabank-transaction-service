@@ -1,7 +1,7 @@
 package com.novabank.transaction.reconciliation;
 
-import com.novabank.transaction.audit.AuditLog;
-import com.novabank.transaction.audit.AuditWriter;
+import com.novabank.transaction.audit.AuditClient;
+import com.novabank.transaction.audit.AuditEvent;
 import com.novabank.transaction.client.AccountClient;
 import com.novabank.transaction.client.AccountClient.AccountRejectedException;
 import com.novabank.transaction.client.AccountClient.LedgerEntry;
@@ -32,7 +32,7 @@ class PendingTransactionReconcilerTest {
 
     private final TransactionRepository repo = mock(TransactionRepository.class);
     private final AccountClient accounts = mock(AccountClient.class);
-    private final AuditWriter audit = mock(AuditWriter.class);
+    private final AuditClient audit = mock(AuditClient.class);
     private final PendingTransactionReconciler reconciler = new PendingTransactionReconciler(repo, accounts,
             new ReconciliationProperties(true, Duration.ofSeconds(30), Duration.ofMinutes(2), Duration.ofMinutes(2), 50),
             audit);
@@ -122,12 +122,13 @@ class PendingTransactionReconcilerTest {
 
         reconciler.runOnce();
 
-        ArgumentCaptor<AuditLog> row = ArgumentCaptor.forClass(AuditLog.class);
-        verify(audit).write(row.capture());
-        assertThat(row.getValue().getAction()).isEqualTo("RECONCILE");
-        assertThat(row.getValue().getActorRole()).isEqualTo("SYSTEM");
-        assertThat(row.getValue().getTargetId()).isEqualTo("NB7");
-        assertThat(row.getValue().getDetails()).isEqualTo("{\"result\":\"FAILED\"}");
+        ArgumentCaptor<AuditEvent> event = ArgumentCaptor.forClass(AuditEvent.class);
+        verify(audit).send(event.capture());
+        assertThat(event.getValue().service()).isEqualTo("transactions");
+        assertThat(event.getValue().action()).isEqualTo("RECONCILE");
+        assertThat(event.getValue().actorRole()).isEqualTo("SYSTEM");
+        assertThat(event.getValue().targetId()).isEqualTo("NB7");
+        assertThat(event.getValue().details()).containsEntry("result", "FAILED");
     }
 
     @Test
@@ -138,6 +139,6 @@ class PendingTransactionReconcilerTest {
 
         reconciler.runOnce();
 
-        verify(audit, never()).write(any());
+        verify(audit, never()).send(any());
     }
 }

@@ -14,6 +14,7 @@ novabank:
     internal-api-key: ${INTERNAL_API_KEY:local-internal-key}
   services:
     account-url: ${ACCOUNT_SERVICE_URL:http://localhost:8082}
+    auth-url: ${AUTH_SERVICE_URL:http://localhost:8081}
 
 springdoc:
   swagger-ui:
