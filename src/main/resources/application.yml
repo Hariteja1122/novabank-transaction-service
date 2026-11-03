@@ -38,6 +38,8 @@ novabank:
     internal-api-key: ${INTERNAL_API_KEY}
   services:
     account-url: ${ACCOUNT_SERVICE_URL}
+    # Audit events go to auth-service, which owns the central audit log (NB_AUTH.AUDIT_LOG).
+    auth-url: ${AUTH_SERVICE_URL}
   limits:
     # Business rule: a single customer transfer cannot exceed this amount.
     max-transfer-amount: ${MAX_TRANSFER_AMOUNT:10000.00}

@@ -1,7 +1,7 @@
 package com.novabank.transaction.reconciliation;
 
-import com.novabank.transaction.audit.AuditLog;
-import com.novabank.transaction.audit.AuditWriter;
+import com.novabank.transaction.audit.AuditClient;
+import com.novabank.transaction.audit.AuditEvent;
 import com.novabank.transaction.client.AccountClient;
 import com.novabank.transaction.client.AccountClient.AccountRejectedException;
 import com.novabank.transaction.client.AccountClient.LedgerEntry;
@@ -37,10 +37,10 @@ public class PendingTransactionReconciler {
     private final TransactionRepository repo;
     private final AccountClient accounts;
     private final ReconciliationProperties props;
-    private final AuditWriter audit;
+    private final AuditClient audit;
 
     public PendingTransactionReconciler(TransactionRepository repo, AccountClient accounts, ReconciliationProperties props,
-                                        AuditWriter audit) {
+                                        AuditClient audit) {
         this.repo = repo;
         this.accounts = accounts;
         this.props = props;
@@ -107,20 +107,13 @@ public class PendingTransactionReconciler {
         return new RunResult(completed, failed, deferred);
     }
 
-    /** Only rows this instance actually settled are audited, so each settlement appears once. */
+    /**
+     * Only rows this instance actually settled are audited, so each settlement appears once.
+     * Sent to auth-service in the background; a failed send never affects reconciliation.
+     */
     private void record(BankTransaction txn, String result) {
-        AuditLog entry = new AuditLog();
-        entry.setOccurredAt(Instant.now());
-        entry.setActorRole("SYSTEM");
-        entry.setAction("RECONCILE");
-        entry.setTargetType("TRANSACTION");
-        entry.setTargetId(txn.getReference());
-        entry.setOutcome(AuditLog.Outcome.SUCCESS);
-        entry.setDetails("{\"result\":\"" + result + "\"}");
-        try {
-            audit.write(entry);
-        } catch (RuntimeException ex) {
-            log.error("AUDIT WRITE FAILED action=RECONCILE target={} result={}", txn.getReference(), result, ex);
-        }
+        audit.send(new AuditEvent(AuditEvent.SERVICE, Instant.now(), null, "SYSTEM", null, "RECONCILE",
+                "TRANSACTION", txn.getReference(), AuditEvent.Outcome.SUCCESS, null, null,
+                java.util.Map.of("result", result), null, null));
     }
 }
