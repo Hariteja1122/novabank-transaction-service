@@ -1,5 +1,7 @@
 package com.novabank.transaction.reconciliation;
 
+import com.novabank.transaction.audit.AuditLog;
+import com.novabank.transaction.audit.AuditWriter;
 import com.novabank.transaction.client.AccountClient;
 import com.novabank.transaction.client.AccountClient.AccountRejectedException;
 import com.novabank.transaction.client.AccountClient.LedgerEntry;
@@ -35,11 +37,14 @@ public class PendingTransactionReconciler {
     private final TransactionRepository repo;
     private final AccountClient accounts;
     private final ReconciliationProperties props;
+    private final AuditWriter audit;
 
-    public PendingTransactionReconciler(TransactionRepository repo, AccountClient accounts, ReconciliationProperties props) {
+    public PendingTransactionReconciler(TransactionRepository repo, AccountClient accounts, ReconciliationProperties props,
+                                        AuditWriter audit) {
         this.repo = repo;
         this.accounts = accounts;
         this.props = props;
+        this.audit = audit;
     }
 
     public record RunResult(int completed, int failed, int deferred) {
@@ -81,10 +86,18 @@ public class PendingTransactionReconciler {
                 continue;
             }
             if (entry.outcome() == LedgerOutcome.APPLIED) {
-                completed += repo.completePending(txn.getId(), entry.recordedAt());
+                int settled = repo.completePending(txn.getId(), entry.recordedAt());
+                completed += settled;
+                if (settled > 0) {
+                    record(txn, "COMPLETED");
+                }
                 log.info("Reconciled {} as COMPLETED (account-service applied it at {})", txn.getReference(), entry.recordedAt());
             } else {
-                failed += repo.failPending(txn.getId(), VOIDED_REASON);
+                int settled = repo.failPending(txn.getId(), VOIDED_REASON);
+                failed += settled;
+                if (settled > 0) {
+                    record(txn, "FAILED");
+                }
                 log.warn("Reconciled {} as FAILED: account-service never applied it", txn.getReference());
             }
         }
@@ -92,5 +105,22 @@ public class PendingTransactionReconciler {
             log.info("Reconciliation run: {} completed, {} failed, {} deferred", completed, failed, deferred);
         }
         return new RunResult(completed, failed, deferred);
+    }
+
+    /** Only rows this instance actually settled are audited, so each settlement appears once. */
+    private void record(BankTransaction txn, String result) {
+        AuditLog entry = new AuditLog();
+        entry.setOccurredAt(Instant.now());
+        entry.setActorRole("SYSTEM");
+        entry.setAction("RECONCILE");
+        entry.setTargetType("TRANSACTION");
+        entry.setTargetId(txn.getReference());
+        entry.setOutcome(AuditLog.Outcome.SUCCESS);
+        entry.setDetails("{\"result\":\"" + result + "\"}");
+        try {
+            audit.write(entry);
+        } catch (RuntimeException ex) {
+            log.error("AUDIT WRITE FAILED action=RECONCILE target={} result={}", txn.getReference(), result, ex);
+        }
     }
 }

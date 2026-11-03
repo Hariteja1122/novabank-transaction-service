@@ -1,5 +1,7 @@
 package com.novabank.transaction.reconciliation;
 
+import com.novabank.transaction.audit.AuditLog;
+import com.novabank.transaction.audit.AuditWriter;
 import com.novabank.transaction.client.AccountClient;
 import com.novabank.transaction.client.AccountClient.AccountRejectedException;
 import com.novabank.transaction.client.AccountClient.LedgerEntry;
@@ -9,6 +11,7 @@ import com.novabank.transaction.txn.BankTransaction;
 import com.novabank.transaction.txn.TransactionRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.http.HttpStatus;
 
 import java.time.Duration;
@@ -29,8 +32,10 @@ class PendingTransactionReconcilerTest {
 
     private final TransactionRepository repo = mock(TransactionRepository.class);
     private final AccountClient accounts = mock(AccountClient.class);
+    private final AuditWriter audit = mock(AuditWriter.class);
     private final PendingTransactionReconciler reconciler = new PendingTransactionReconciler(repo, accounts,
-            new ReconciliationProperties(true, Duration.ofSeconds(30), Duration.ofMinutes(2), Duration.ofMinutes(2), 50));
+            new ReconciliationProperties(true, Duration.ofSeconds(30), Duration.ofMinutes(2), Duration.ofMinutes(2), 50),
+            audit);
 
     @BeforeEach
     void claimsSucceedByDefault() {
@@ -108,5 +113,31 @@ class PendingTransactionReconcilerTest {
 
         assertThat(result).isEqualTo(new PendingTransactionReconciler.RunResult(0, 1, 1));
         verify(repo, never()).failPending(eq(6L), anyString());
+    }
+
+    @Test
+    void eachSettlementIsAuditedAsSystem() {
+        due(pending(7, "NB7"));
+        when(accounts.voidUnlessApplied("NB7")).thenReturn(new LedgerEntry("NB7", LedgerOutcome.VOIDED, Instant.now()));
+
+        reconciler.runOnce();
+
+        ArgumentCaptor<AuditLog> row = ArgumentCaptor.forClass(AuditLog.class);
+        verify(audit).write(row.capture());
+        assertThat(row.getValue().getAction()).isEqualTo("RECONCILE");
+        assertThat(row.getValue().getActorRole()).isEqualTo("SYSTEM");
+        assertThat(row.getValue().getTargetId()).isEqualTo("NB7");
+        assertThat(row.getValue().getDetails()).isEqualTo("{\"result\":\"FAILED\"}");
+    }
+
+    @Test
+    void settlementWonByAnotherInstanceIsNotAuditedHere() {
+        due(pending(8, "NB8"));
+        when(accounts.voidUnlessApplied("NB8")).thenReturn(new LedgerEntry("NB8", LedgerOutcome.APPLIED, Instant.now()));
+        when(repo.completePending(eq(8L), any())).thenReturn(0);
+
+        reconciler.runOnce();
+
+        verify(audit, never()).write(any());
     }
 }

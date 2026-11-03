@@ -1,5 +1,6 @@
 package com.novabank.transaction.txn;
 
+import com.novabank.transaction.audit.Audited;
 import com.novabank.transaction.common.CurrentUser;
 import com.novabank.transaction.txn.TransactionDtos.TransactionDto;
 import com.novabank.transaction.txn.TransactionDtos.TransferRequest;
@@ -31,6 +32,7 @@ public class TransactionController {
     }
 
     @PostMapping("/transfer")
+    @Audited(action = "TRANSFER", targetType = "TRANSACTION")
     @ResponseStatus(HttpStatus.CREATED)
     public TransactionDto transfer(@Valid @RequestBody TransferRequest req,
                                    @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,

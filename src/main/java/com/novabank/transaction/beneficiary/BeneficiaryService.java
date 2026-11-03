@@ -1,5 +1,6 @@
 package com.novabank.transaction.beneficiary;
 
+import com.novabank.transaction.audit.Audit;
 import com.novabank.transaction.beneficiary.BeneficiaryDtos.BeneficiaryDto;
 import com.novabank.transaction.beneficiary.BeneficiaryDtos.CreateBeneficiaryRequest;
 import com.novabank.transaction.client.AccountClient;
@@ -42,6 +43,7 @@ public class BeneficiaryService {
 
     public BeneficiaryDto create(CreateBeneficiaryRequest req, Long customerId) {
         String number = req.accountNumber();
+        Audit.detail("accountNumber", number);
         if (repo.existsByCustomerIdAndAccountNumber(customerId, number)) {
             throw ApiException.conflict("You already have a payee for this account");
         }
@@ -65,6 +67,7 @@ public class BeneficiaryService {
             // Two identical requests raced; UQ_BENEFICIARY_ACCOUNT kept only one.
             throw ApiException.conflict("You already have a payee for this account");
         }
+        Audit.target("BENEFICIARY", b.getId());
         log.info("Customer {} saved payee {} for account {}", customerId, b.getId(), number);
         return BeneficiaryDto.from(b);
     }
@@ -78,7 +81,9 @@ public class BeneficiaryService {
 
     @Transactional
     public void delete(Long id, Long customerId) {
-        repo.delete(find(id, customerId));
+        Beneficiary b = find(id, customerId);
+        Audit.detail("accountNumber", b.getAccountNumber());
+        repo.delete(b);
         log.info("Customer {} removed payee {}", customerId, id);
     }
 

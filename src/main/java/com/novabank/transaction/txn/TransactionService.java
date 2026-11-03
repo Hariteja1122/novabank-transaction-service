@@ -1,5 +1,6 @@
 package com.novabank.transaction.txn;
 
+import com.novabank.transaction.audit.Audit;
 import com.novabank.transaction.client.AccountClient;
 import com.novabank.transaction.client.AccountClient.AccountRejectedException;
 import com.novabank.transaction.common.ApiException;
@@ -56,10 +57,14 @@ public class TransactionService {
     }
 
     public TransactionDto transfer(TransferRequest req, Long customerId, String idempotencyKey) {
+        Audit.detail("fromAccount", req.fromAccount());
+        Audit.detail("toAccount", req.toAccount());
+        Audit.detail("amount", req.amount().toPlainString());
         String key = normalizeKey(idempotencyKey);
         var existing = repo.findByIdempotencyKey(key);
         if (existing.isPresent()) {
             log.info("Idempotent replay of {} for key {}", existing.get().getReference(), key);
+            Audit.detail("replayed", true);
             return replay(existing.get());
         }
         if (req.fromAccount().equals(req.toAccount())) {
@@ -80,6 +85,7 @@ public class TransactionService {
         txn.setDescription(StringUtils.hasText(req.description()) ? req.description().trim() : "Funds transfer");
         txn.setInitiatedBy(customerId);
         txn = savePending(txn);
+        Audit.target("TRANSACTION", txn.getReference());
 
         try {
             accounts.transfer(req.fromAccount(), req.toAccount(), req.amount(), customerId, txn.getReference());
@@ -92,9 +98,12 @@ public class TransactionService {
     }
 
     public TransactionDto deposit(DepositRequest req, Long adminId, String idempotencyKey) {
+        Audit.detail("toAccount", req.toAccount());
+        Audit.detail("amount", req.amount().toPlainString());
         String key = normalizeKey(idempotencyKey);
         var existing = repo.findByIdempotencyKey(key);
         if (existing.isPresent()) {
+            Audit.detail("replayed", true);
             return replay(existing.get());
         }
         BankTransaction txn = new BankTransaction();
@@ -106,6 +115,7 @@ public class TransactionService {
         txn.setDescription(StringUtils.hasText(req.description()) ? req.description().trim() : "Branch deposit");
         txn.setInitiatedBy(adminId);
         txn = savePending(txn);
+        Audit.target("TRANSACTION", txn.getReference());
 
         try {
             accounts.deposit(req.toAccount(), req.amount(), txn.getReference());
@@ -173,6 +183,8 @@ public class TransactionService {
     }
 
     private TransactionDto replay(BankTransaction txn) {
+        Audit.target("TRANSACTION", txn.getReference());
+        Audit.detail("status", txn.getStatus());
         if (txn.getStatus() == TxnStatus.FAILED) {
             throw new TransferFailedException(txn.getReference(), txn.getFailureReason());
         }
