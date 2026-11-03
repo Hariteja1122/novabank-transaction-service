@@ -63,6 +63,10 @@ public class BankTransaction {
     @Column(name = "COMPLETED_AT")
     private Instant completedAt;
 
+    /** Reconciliation claim. Read-only here: only TransactionRepository's conditional updates write it. */
+    @Column(name = "RECON_LEASE_UNTIL", insertable = false, updatable = false)
+    private Instant reconLeaseUntil;
+
     @PrePersist
     void onCreate() {
         if (createdAt == null) {

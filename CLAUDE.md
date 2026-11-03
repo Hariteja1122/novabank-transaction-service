@@ -6,7 +6,8 @@ novabank-transaction-service (Spring Boot 3.5, Java 21) and novabank-platform (D
 Docker Compose, GCP bootstrap, Postman collection). See ../novabank-platform/README.md.
 
 ## Commands
-- Build and test: `mvn verify`
+- Build and test: `mvn verify` (unit tests, then `*IT` Db2 integration tests via failsafe; need Docker and
+  `../novabank-platform`). Unit tests only: `mvn verify -DskipITs`. One test: `mvn test -Dtest=Class#method`
 - Run locally: start Db2 with `../novabank-platform/dev.sh db`, then `mvn spring-boot:run`
   (profile `local` is the default) or the IntelliJ run configuration in `.run/`.
 - Whole stack: `../novabank-platform/dev.sh up`
@@ -21,5 +22,13 @@ Docker Compose, GCP bootstrap, Postman collection). See ../novabank-platform/REA
 - Money is `BigDecimal` with scale 2. Never double.
 - Timestamps are `Instant` and the JVM runs in UTC.
 - Secrets come from environment variables. Never commit real values.
+- Every POST/PUT/PATCH/DELETE handler under `/api` needs `@Audited` (`AuditCoverageTest` enforces it); GET handlers
+  must not have it. Add facts with `Audit.target` / `Audit.detail` / `Audit.reason`, and never pass a password,
+  hash, token or request body to them.
 - Environments: `application-local.yml`, `application-dev.yml`, `application-preprod.yml`,
   and the Cloud Run definitions in `deploy/environments/`.
+
+## Reconciliation
+- `PendingTransactionReconciler` settles PENDING rows against account-service's ledger. It must stay safe on
+  several instances: claim with `claimForReconciliation`, and write final states only via the conditional
+  `completePending` / `failPending` updates (never `save()` a reconciled entity). `ReconciliationIT` proves it.

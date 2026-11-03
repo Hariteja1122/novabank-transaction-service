@@ -14,6 +14,7 @@ import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientResponseException;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -64,6 +65,35 @@ public class AccountClient {
                 .body(new ParameterizedTypeReference<List<AccountRef>>() {
                 }));
         return accounts == null ? Set.of() : accounts.stream().map(AccountRef::accountNumber).collect(Collectors.toSet());
+    }
+
+    /** True if any account (in any status) has this number. */
+    public boolean exists(String accountNumber) {
+        try {
+            call(() -> client.get().uri("/internal/accounts/{number}", accountNumber).retrieve().toBodilessEntity());
+            return true;
+        } catch (AccountRejectedException ex) {
+            if (ex.getStatus() == 404) {
+                return false;
+            }
+            throw ex;
+        }
+    }
+
+    public enum LedgerOutcome { APPLIED, VOIDED }
+
+    public record LedgerEntry(String reference, LedgerOutcome outcome, Instant recordedAt) {
+    }
+
+    /**
+     * Final word on a reference: APPLIED if account-service moved the money, otherwise it
+     * voids the reference (so a late request can never apply it) and answers VOIDED.
+     * Idempotent. A 409 means a request for this reference is still in flight.
+     */
+    public LedgerEntry voidUnlessApplied(String reference) {
+        return call(() -> client.post().uri("/internal/accounts/ledger/{reference}/void", reference)
+                .retrieve()
+                .body(LedgerEntry.class));
     }
 
     public void transfer(String from, String to, BigDecimal amount, Long requestedBy, String reference) {

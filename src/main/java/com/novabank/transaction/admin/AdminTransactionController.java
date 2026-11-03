@@ -1,5 +1,6 @@
 package com.novabank.transaction.admin;
 
+import com.novabank.transaction.audit.Audited;
 import com.novabank.transaction.common.CurrentUser;
 import com.novabank.transaction.txn.TransactionDtos.DepositRequest;
 import com.novabank.transaction.txn.TransactionDtos.TransactionDto;
@@ -54,6 +55,7 @@ public class AdminTransactionController {
     }
 
     @PostMapping("/deposit")
+    @Audited(action = "DEPOSIT", targetType = "TRANSACTION")
     @ResponseStatus(HttpStatus.CREATED)
     public TransactionDto deposit(@Valid @RequestBody DepositRequest req,
                                   @RequestHeader(name = "Idempotency-Key", required = false) String idempotencyKey,
