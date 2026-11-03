@@ -41,6 +41,14 @@ novabank:
   limits:
     # Business rule: a single customer transfer cannot exceed this amount.
     max-transfer-amount: ${MAX_TRANSFER_AMOUNT:10000.00}
+  # Settles PENDING transfers and deposits against account-service's ledger. Safe on any
+  # number of instances (row leases + conditional updates). See PendingTransactionReconciler.
+  reconciliation:
+    enabled: ${RECONCILIATION_ENABLED:true}
+    interval: PT30S
+    pending-age: PT2M
+    lease: PT2M
+    batch-size: 50
 
 management:
   endpoints:
